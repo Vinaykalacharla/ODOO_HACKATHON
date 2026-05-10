@@ -1,25 +1,28 @@
-import { cn } from '../../lib/cn';
+import React from 'react';
 
-const toneMap = {
-  green: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
-  amber: 'border border-amber-200 bg-amber-50 text-amber-700',
-  blue: 'border border-sky-200 bg-sky-50 text-sky-700',
-  teal: 'border border-teal-200 bg-teal-50 text-teal-700',
-  violet: 'border border-violet-200 bg-violet-50 text-violet-700',
-  gray: 'border border-slate-200 bg-slate-50 text-slate-600',
-  red: 'border border-rose-200 bg-rose-50 text-rose-700',
-};
+const Badge = ({ children, variant = 'gray', className = '' }) => {
+  const variants = {
+    green: 'bg-teal/10 text-teal border-teal/20',
+    amber: 'bg-accent/10 text-accent border-accent/20',
+    blue: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+    red: 'bg-danger/10 text-danger border-danger/20',
+    gray: 'bg-muted/10 text-muted border-muted/20'
+  };
 
-export default function Badge({ children, tone = 'gray', className }) {
+  const statusMap = {
+    planned: 'green',
+    completed: 'green',
+    draft: 'amber',
+    ongoing: 'blue'
+  };
+
+  const selectedVariant = statusMap[children?.toLowerCase()] || variant;
+
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] leading-none',
-        toneMap[tone] || toneMap.gray,
-        className,
-      )}
-    >
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border uppercase tracking-wider ${variants[selectedVariant]} ${className}`}>
       {children}
     </span>
   );
-}
+};
+
+export default Badge;

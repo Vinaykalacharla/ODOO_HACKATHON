@@ -1,176 +1,178 @@
-import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Trash2, PackageCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import api from '../../lib/axios';
+import { useToast } from '../../components/ui/Toast';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import Input from '../../components/ui/Input';
-import Badge from '../../components/ui/Badge';
-import EmptyState from '../../components/ui/EmptyState';
-import TripSubnav from '../../components/travel/TripSubnav';
-import TripAccessDenied from '../../components/travel/TripAccessDenied';
-import { useTripBundle } from '../../hooks/useTripBundle';
-import { useAuthStore } from '../../store/authStore';
-import { useTravelStore } from '../../store/travelStore';
-import { useToastStore } from '../../store/toastStore';
-import { PACKING_CATEGORY_META } from '../../lib/meta';
+import { ArrowLeft, Package, Plus, Trash2, CheckCircle2, Circle } from 'lucide-react';
 
-export default function PackingPage() {
+const PackingPage = () => {
   const { tripId } = useParams();
-  const navigate = useNavigate();
-  const bundle = useTripBundle(tripId);
-  const currentUser = useAuthStore((store) => store.users.find((user) => user.id === store.currentUserId));
-  const addPackingItem = useTravelStore((store) => store.addPackingItem);
-  const togglePackingItem = useTravelStore((store) => store.togglePackingItem);
-  const deletePackingItem = useTravelStore((store) => store.deletePackingItem);
-  const pushToast = useToastStore((store) => store.pushToast);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('clothing');
-  const [value, setValue] = useState('');
+  const [newItem, setNewItem] = useState('');
+  
+  const { addToast } = useToast();
+  const navigate = useNavigate();
 
-  const itemsByCategory = useMemo(() => {
-    if (!bundle) return [];
-    return bundle.packingItems.filter((item) => item.category === activeCategory);
-  }, [bundle, activeCategory]);
+  const categories = [
+    { id: 'clothing', label: 'Clothing' },
+    { id: 'documents', label: 'Documents' },
+    { id: 'electronics', label: 'Electronics' },
+    { id: 'toiletries', label: 'Toiletries' },
+    { id: 'misc', label: 'Misc' },
+  ];
 
-  const packedCount = bundle?.packingItems.filter((item) => item.isPacked).length || 0;
-  const totalCount = bundle?.packingItems.length || 0;
-
-  if (!bundle) {
-    return (
-      <EmptyState
-        icon={PackageCheck}
-        title="Trip not found"
-        description="Open a valid trip to manage its packing checklist."
-        actionLabel="Back to trips"
-        onAction={() => navigate('/trips')}
-      />
-    );
-  }
-
-  if (bundle.trip.userId !== currentUser?.id && !currentUser?.isAdmin) {
-    return <TripAccessDenied actionLabel="Back to trips" onAction={() => navigate('/trips')} />;
-  }
-
-  const addItem = async () => {
-    if (!value.trim()) return;
-    await addPackingItem(tripId, { label: value, category: activeCategory });
-    setValue('');
-    pushToast({ title: 'Packing item added', description: 'New checklist item created.', variant: 'success' });
+  const fetchData = async () => {
+    try {
+      const { data } = await api.get(`/packing/${tripId}/packing`);
+      setItems(data.data);
+    } catch (err) {
+      addToast('Failed to load packing items', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    fetchData();
+  }, [tripId]);
+
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    if (!newItem) return;
+    try {
+      await api.post(`/packing/${tripId}/packing`, {
+        label: newItem,
+        category: activeCategory,
+        is_packed: 0
+      });
+      setNewItem('');
+      fetchData();
+    } catch (err) {
+      addToast('Failed to add item', 'error');
+    }
+  };
+
+  const toggleItem = async (itemId) => {
+    try {
+      await api.patch(`/packing/${tripId}/packing/${itemId}`);
+      fetchData();
+    } catch (err) {
+      addToast('Failed to update status', 'error');
+    }
+  };
+
+  const deleteItem = async (itemId) => {
+    try {
+      await api.delete(`/packing/${tripId}/packing/${itemId}`);
+      fetchData();
+    } catch (err) {
+      addToast('Failed to delete', 'error');
+    }
+  };
+
+  const filteredItems = items.filter(item => item.category === activeCategory);
+  const packedCount = items.filter(item => item.is_packed).length;
+  const progress = items.length > 0 ? (packedCount / items.length) * 100 : 0;
+
   return (
-    <div className="space-y-6">
-      <TripSubnav basePath={`/trips/${tripId}`} />
-
-      <section className="overflow-hidden rounded-[2rem] border border-[#cfe0fb] bg-[linear-gradient(135deg,rgba(37,99,235,0.12),rgba(15,118,110,0.08))] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] lg:p-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#1d4ed8]">Packing Checklist</p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text">{bundle.trip.title}</h1>
-            <p className="mt-1 text-sm text-muted">
-              {packedCount} of {totalCount} items packed
-            </p>
-          </div>
-          <div className="w-full max-w-md rounded-2xl border border-border bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between text-sm text-muted">
-              <span>Progress</span>
-              <span>{totalCount ? Math.round((packedCount / totalCount) * 100) : 0}%</span>
-            </div>
-            <div className="h-3 rounded-full bg-bg">
-              <div className="h-full rounded-full bg-teal transition-all" style={{ width: `${totalCount ? (packedCount / totalCount) * 100 : 0}%` }} />
-            </div>
-          </div>
+    <div className="max-w-4xl mx-auto">
+      <header className="flex items-center gap-4 mb-12">
+        <button onClick={() => navigate(`/trips/${tripId}`)} className="p-2 hover:bg-surface rounded-full transition-colors">
+          <ArrowLeft />
+        </button>
+        <div className="flex-1">
+          <h1 className="text-4xl">Packing Checklist</h1>
+          <p className="text-muted">Don't leave the essentials behind.</p>
         </div>
-      </section>
+      </header>
 
-      <Card className="flex flex-wrap gap-2 p-4">
-        {Object.entries(PACKING_CATEGORY_META).map(([valueKey, meta]) => (
-          <button
-            key={valueKey}
-            type="button"
-            onClick={() => setActiveCategory(valueKey)}
-            className={`focus-ring rounded-full px-4 py-2 text-sm font-medium transition ${
-              activeCategory === valueKey ? 'bg-accent text-text' : 'bg-bg text-muted hover:text-text'
-            }`}
-          >
-            {meta.label}
-          </button>
-        ))}
+      {/* Progress Section */}
+      <Card className="p-8 mb-12 bg-teal/5 border-teal/10">
+        <div className="flex justify-between items-end mb-4">
+          <h3 className="text-xl font-bold text-teal">Overall Progress</h3>
+          <span className="text-2xl font-bold text-teal">{packedCount} / {items.length} packed</span>
+        </div>
+        <div className="h-4 w-full bg-teal/10 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-teal transition-all duration-500 ease-out" 
+            style={{ width: `${progress}%` }} 
+          />
+        </div>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-muted">Category</p>
-              <h2 className="mt-2 text-3xl text-text">{PACKING_CATEGORY_META[activeCategory].label}</h2>
-            </div>
-            <Badge tone="gray">{itemsByCategory.length} items</Badge>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        {/* Category Tabs */}
+        <div className="flex flex-col gap-2">
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`flex items-center justify-between px-6 py-4 rounded-2xl font-bold transition-all border
+                ${activeCategory === cat.id 
+                  ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' 
+                  : 'bg-white text-muted border-border hover:border-muted'}`}
+            >
+              {cat.label}
+              <span className="text-xs opacity-60">
+                {items.filter(i => i.category === cat.id && i.is_packed).length} / {items.filter(i => i.category === cat.id).length}
+              </span>
+            </button>
+          ))}
+        </div>
 
-          <div className="mt-5 space-y-3">
-            {itemsByCategory.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl bg-bg px-4 py-3">
-                <label className="flex items-center gap-3 text-sm text-text">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(item.isPacked)}
-                    onChange={() => togglePackingItem(item.id)}
-                    className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
-                  />
-                  <span className={item.isPacked ? 'line-through text-muted' : ''}>{item.label}</span>
-                </label>
-                <Button
-                  variant="ghost"
-                  className="text-danger"
-                  onClick={async () => {
-                    await deletePackingItem(item.id);
-                    pushToast({ title: 'Packing item deleted', description: 'The item was removed.', variant: 'success' });
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-
-            {itemsByCategory.length === 0 ? (
-              <EmptyState icon={PackageCheck} title="No items in this category" description="Add a new packing item below." />
-            ) : null}
-          </div>
-
-          <div className="mt-5 flex gap-3">
-            <Input
-              label={`Add ${PACKING_CATEGORY_META[activeCategory].label.toLowerCase()} item`}
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder="Packable item"
-              className="flex-1"
-            />
-            <div className="flex items-end">
-              <Button onClick={addItem}>Add</Button>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <h2 className="text-2xl text-text">All Categories</h2>
-          <div className="mt-4 space-y-3">
-            {Object.entries(PACKING_CATEGORY_META).map(([valueKey, meta]) => {
-              const count = bundle.packingItems.filter((item) => item.category === valueKey).length;
-              const packed = bundle.packingItems.filter((item) => item.category === valueKey && item.isPacked).length;
-              return (
-                <div key={valueKey} className="rounded-2xl border border-border bg-bg px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-text">{meta.label}</span>
-                    <Badge tone="gray">
-                      {packed}/{count}
-                    </Badge>
+        {/* Items List */}
+        <div className="md:col-span-3">
+          <Card className="p-8">
+            <h2 className="text-2xl mb-8 capitalize">{activeCategory} Items</h2>
+            
+            <div className="space-y-4 mb-8">
+              {filteredItems.length > 0 ? (
+                filteredItems.map(item => (
+                  <div key={item.id} className="flex items-center gap-4 group">
+                    <button 
+                      onClick={() => toggleItem(item.id)}
+                      className={`transition-colors ${item.is_packed ? 'text-teal' : 'text-muted/40 hover:text-accent'}`}
+                    >
+                      {item.is_packed ? <CheckCircle2 className="h-6 w-6" /> : <Circle className="h-6 w-6" />}
+                    </button>
+                    <span className={`flex-1 font-medium transition-all ${item.is_packed ? 'text-muted line-through' : 'text-text'}`}>
+                      {item.label}
+                    </span>
+                    <button 
+                      onClick={() => deleteItem(item.id)}
+                      className="p-2 text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
+                ))
+              ) : (
+                <div className="py-12 text-center">
+                  <p className="text-muted">No items in this category yet.</p>
                 </div>
-              );
-            })}
-          </div>
-        </Card>
+              )}
+            </div>
+
+            <form onSubmit={handleAddItem} className="flex gap-2">
+              <input 
+                type="text"
+                placeholder={`Add new ${activeCategory} item...`}
+                className="flex-1 px-4 py-3 rounded-xl border border-border outline-none bg-bg focus:border-accent"
+                value={newItem}
+                onChange={(e) => setNewItem(e.target.value)}
+              />
+              <Button type="submit" className="px-6">
+                <Plus className="h-5 w-5" />
+              </Button>
+            </form>
+          </Card>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default PackingPage;

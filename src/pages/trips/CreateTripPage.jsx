@@ -1,259 +1,196 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { CalendarDays, FileText, Image, Wallet } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import api from '../../lib/axios';
+import { useToast } from '../../components/ui/Toast';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
-import EmptyState from '../../components/ui/EmptyState';
-import TripAccessDenied from '../../components/travel/TripAccessDenied';
-import { useAuthStore } from '../../store/authStore';
-import { useTravelStore } from '../../store/travelStore';
-import { useToastStore } from '../../store/toastStore';
-import { validateTrip } from '../../lib/validators';
-import { TRIP_STATUS_META } from '../../lib/meta';
+import { Plane, Calendar, Wallet, Image as ImageIcon, ArrowLeft } from 'lucide-react';
 
-const initialForm = {
-  title: '',
-  description: '',
-  startDate: '',
-  endDate: '',
-  totalBudget: '',
-  coverImageUrl: '',
-  status: 'draft',
-};
-
-export default function CreateTripPage() {
-  const navigate = useNavigate();
+const CreateTripPage = () => {
   const { tripId } = useParams();
-  const currentUser = useAuthStore((state) => state.users.find((user) => user.id === state.currentUserId));
-  const state = useTravelStore((current) => current);
-  const createTrip = useTravelStore((store) => store.createTrip);
-  const updateTrip = useTravelStore((store) => store.updateTrip);
-  const pushToast = useToastStore((store) => store.pushToast);
+  const isEdit = !!tripId;
+  const navigate = useNavigate();
+  const { addToast } = useToast();
 
-  const existingTrip = useMemo(() => state.trips.find((trip) => trip.id === tripId && !trip.deletedAt), [state, tripId]);
-
-  const [form, setForm] = useState(initialForm);
-  const [touched, setTouched] = useState({});
-  const [errors, setErrors] = useState({});
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+    total_budget: 0,
+    cover_image_url: '',
+    status: 'draft',
+    is_public: 0
+  });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (existingTrip) {
-      setForm({
-        title: existingTrip.title,
-        description: existingTrip.description || '',
-        startDate: existingTrip.startDate,
-        endDate: existingTrip.endDate,
-        totalBudget: String(existingTrip.totalBudget ?? ''),
-        coverImageUrl: existingTrip.coverImageUrl || '',
-        status: existingTrip.status || 'draft',
-      });
+    if (isEdit) {
+      const fetchTrip = async () => {
+        try {
+          const { data } = await api.get(`/trips/${tripId}`);
+          const trip = data.data;
+          // Format dates for input[type="date"]
+          setFormData({
+            ...trip,
+            start_date: trip.start_date.split('T')[0],
+            end_date: trip.end_date.split('T')[0],
+          });
+        } catch (err) {
+          addToast('Failed to load trip data', 'error');
+          navigate('/trips');
+        }
+      };
+      fetchTrip();
     }
-  }, [existingTrip]);
+  }, [tripId, isEdit]);
 
-  const mode = existingTrip ? 'edit' : 'create';
-
-  const validate = (nextForm = form) => validateTrip(nextForm);
-
-  const handleBlur = (field) => {
-    setTouched((state) => ({ ...state, [field]: true }));
-    setErrors(validate(form));
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const nextErrors = validate(form);
-    setTouched({ title: true, description: true, startDate: true, endDate: true, totalBudget: true });
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      if (existingTrip) {
-        await updateTrip(existingTrip.id, {
-          title: form.title,
-          description: form.description,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          totalBudget: Number(form.totalBudget || 0),
-          coverImageUrl: form.coverImageUrl,
-          status: form.status,
-        });
-        pushToast({ title: 'Trip updated', description: 'Your itinerary changes were saved.', variant: 'success' });
-        navigate(`/trips/${existingTrip.id}`);
+      if (isEdit) {
+        await api.put(`/trips/${tripId}`, formData);
+        addToast('Trip updated successfully!', 'success');
       } else {
-        const created = await createTrip({
-          userId: currentUser.id,
-          title: form.title,
-          description: form.description,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          totalBudget: Number(form.totalBudget || 0),
-          coverImageUrl: form.coverImageUrl,
-          status: form.status,
-        });
-        pushToast({ title: 'Trip created', description: 'Your new journey is ready.', variant: 'success' });
-        navigate(`/trips/${created.id}`);
+        const { data } = await api.post('/trips', formData);
+        addToast('New adventure created!', 'success');
+        navigate(`/trips/${data.data.id}`);
+        return;
       }
-    } catch (error) {
-      pushToast({ title: 'Could not save trip', description: error.message, variant: 'error' });
+      navigate(`/trips/${tripId}`);
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Failed to save trip', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  if (tripId && !existingTrip) {
-    return (
-      <EmptyState
-        icon={CalendarDays}
-        title="Trip not found"
-        description="The itinerary you are trying to edit no longer exists."
-        actionLabel="Back to trips"
-        onAction={() => navigate('/trips')}
-      />
-    );
-  }
-
-  if (existingTrip && existingTrip.userId !== currentUser?.id && !currentUser?.isAdmin) {
-    return <TripAccessDenied actionLabel="Back to trips" onAction={() => navigate('/trips')} />;
-  }
-
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-[2rem] border border-[#cfe0fb] bg-[linear-gradient(135deg,rgba(37,99,235,0.12),rgba(15,118,110,0.08))] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] lg:p-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#1d4ed8]">{mode === 'edit' ? 'Edit trip' : 'Create trip'}</p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text">{mode === 'edit' ? 'Refine the itinerary' : 'Plan a new trip'}</h1>
-            <p className="mt-1 text-sm text-muted">Set the essentials first, then fill in stops, budget, packing, and notes from the trip hub.</p>
+    <div className="max-w-3xl mx-auto">
+      <button 
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-2 text-muted hover:text-text font-bold mb-8 transition-colors"
+      >
+        <ArrowLeft className="h-5 w-5" /> Back
+      </button>
+
+      <header className="mb-12">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="p-3 bg-accent rounded-2xl text-white">
+            <Plane className="h-8 w-8" />
           </div>
-          <Button as={Link} to="/trips" variant="secondary">
-            Back to Trips
-          </Button>
+          <h1 className="text-4xl">{isEdit ? 'Edit Your Trip' : 'Plan a New Trip'}</h1>
         </div>
-      </section>
+        <p className="text-muted text-lg">Define the details of your next grand journey.</p>
+      </header>
 
-      <Card className="grid gap-0 overflow-hidden lg:grid-cols-[1.1fr_0.9fr]">
-        <form className="space-y-5 p-6 lg:p-8" onSubmit={handleSubmit}>
-          <div className="grid gap-5 md:grid-cols-2">
-            <Input
-              label="Trip Name"
-              value={form.title}
-              onChange={(event) => setForm((state) => ({ ...state, title: event.target.value }))}
-              onBlur={() => handleBlur('title')}
-              error={touched.title ? errors.title : ''}
-              placeholder="Europe Summer 2025"
-              icon={<FileText className="h-4 w-4" />}
-            />
-            <Input
-              label="Status"
-              as="select"
-              value={form.status}
-              onChange={(event) => setForm((state) => ({ ...state, status: event.target.value }))}
-            >
-              {Object.entries(TRIP_STATUS_META).map(([value, meta]) => (
-                <option key={value} value={value}>
-                  {meta.label}
-                </option>
-              ))}
-            </Input>
-          </div>
-
-          <Input
-            label="Description"
-            as="textarea"
-            rows={4}
-            value={form.description}
-            onChange={(event) => setForm((state) => ({ ...state, description: event.target.value }))}
-            onBlur={() => handleBlur('description')}
-            error={touched.description ? errors.description : ''}
-            placeholder="Describe the style, pace, and focus of the trip."
-            className="min-h-[120px]"
+      <form onSubmit={handleSubmit}>
+        <Card className="p-8 space-y-8">
+          <Input 
+            label="Trip Title"
+            name="title"
+            placeholder="e.g. Europe Summer 2025"
+            value={formData.title}
+            onChange={handleChange}
+            required
           />
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <Input
-              label="Start Date"
-              type="date"
-              value={form.startDate}
-              onChange={(event) => setForm((state) => ({ ...state, startDate: event.target.value }))}
-              onBlur={() => handleBlur('startDate')}
-              error={touched.startDate ? errors.startDate : ''}
-              icon={<CalendarDays className="h-4 w-4" />}
-            />
-            <Input
-              label="End Date"
-              type="date"
-              value={form.endDate}
-              onChange={(event) => setForm((state) => ({ ...state, endDate: event.target.value }))}
-              onBlur={() => handleBlur('endDate')}
-              error={touched.endDate ? errors.endDate : ''}
-              icon={<CalendarDays className="h-4 w-4" />}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-muted ml-1">Description</label>
+            <textarea 
+              name="description"
+              rows={4}
+              className="px-4 py-2.5 rounded-xl border border-border focus:border-accent focus:ring-4 focus:ring-accent/10 outline-none bg-surface text-text resize-none"
+              placeholder="What's this trip about?"
+              value={formData.description}
+              onChange={handleChange}
             />
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <Input
-              label="Total Budget"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input 
+              label="Start Date"
+              name="start_date"
+              type="date"
+              value={formData.start_date}
+              onChange={handleChange}
+              required
+            />
+            <Input 
+              label="End Date"
+              name="end_date"
+              type="date"
+              value={formData.end_date}
+              onChange={handleChange}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input 
+              label="Total Budget ($)"
+              name="total_budget"
               type="number"
               min="0"
-              step="0.01"
-              value={form.totalBudget}
-              onChange={(event) => setForm((state) => ({ ...state, totalBudget: event.target.value }))}
-              onBlur={() => handleBlur('totalBudget')}
-              error={touched.totalBudget ? errors.totalBudget : ''}
-              placeholder="5000"
-              icon={<Wallet className="h-4 w-4" />}
+              value={formData.total_budget}
+              onChange={handleChange}
+              placeholder="0.00"
             />
-            <Input
-              label="Cover Image URL"
-              value={form.coverImageUrl}
-              onChange={(event) => setForm((state) => ({ ...state, coverImageUrl: event.target.value }))}
-              placeholder="https://..."
-              helperText="Optional. Used as the hero image on trip pages."
-              icon={<Image className="h-4 w-4" />}
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-muted ml-1">Status</label>
+              <select 
+                name="status"
+                className="px-4 py-2.5 rounded-xl border border-border focus:border-accent focus:ring-4 focus:ring-accent/10 outline-none bg-surface text-text"
+                value={formData.status}
+                onChange={handleChange}
+              >
+                <option value="draft">Draft</option>
+                <option value="planned">Planned</option>
+                <option value="ongoing">Ongoing</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="submit" loading={loading}>
-              {mode === 'edit' ? 'Save Changes' : 'Create Trip'}
+          <Input 
+            label="Cover Image URL (Optional)"
+            name="cover_image_url"
+            placeholder="https://..."
+            value={formData.cover_image_url}
+            onChange={handleChange}
+            helper="Paste a link to a nice background image"
+          />
+
+          <div className="flex items-center gap-3 pt-4 border-t border-border">
+            <input 
+              type="checkbox"
+              id="is_public"
+              checked={formData.is_public === 1}
+              onChange={(e) => setFormData(prev => ({ ...prev, is_public: e.target.checked ? 1 : 0 }))}
+              className="h-5 w-5 rounded border-border text-accent focus:ring-accent"
+            />
+            <label htmlFor="is_public" className="text-sm font-bold text-text">Make this trip public (Shareable via link)</label>
+          </div>
+
+          <div className="flex gap-4 pt-4">
+            <Button type="submit" loading={loading} className="flex-1 py-4 text-lg">
+              {isEdit ? 'Save Changes' : 'Create Trip'}
             </Button>
-            <Button as={Link} to="/trips" variant="secondary">
+            <Button type="button" variant="secondary" onClick={() => navigate(-1)} className="px-8">
               Cancel
             </Button>
           </div>
-        </form>
-
-        <div className="border-t border-border bg-bg/50 p-6 lg:border-l lg:border-t-0 lg:p-8">
-          <Badge tone={form.status === 'draft' ? 'amber' : form.status === 'ongoing' ? 'blue' : 'green'}>
-            {TRIP_STATUS_META[form.status]?.label || 'Draft'}
-          </Badge>
-          <h2 className="mt-4 text-3xl text-text">
-            {form.title || 'Your next trip starts here'}
-          </h2>
-          <p className="mt-3 text-sm leading-7 text-muted">
-            Set the essentials first, then fill in stops, activities, budget, packing, and notes from the trip hub after save.
-          </p>
-
-          <div className="mt-6 space-y-3">
-            {[
-              'Trip detail page',
-              'Itinerary builder',
-              'Budget tracker',
-              'Packing checklist',
-              'Trip notes',
-            ].map((item) => (
-              <div key={item} className="flex items-center justify-between rounded-2xl border border-border bg-white px-4 py-3">
-                <span className="text-sm text-text">{item}</span>
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Ready</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
+        </Card>
+      </form>
     </div>
   );
-}
+};
+
+export default CreateTripPage;

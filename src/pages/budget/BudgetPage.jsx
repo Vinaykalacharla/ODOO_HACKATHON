@@ -1,332 +1,195 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Trash2, PencilLine, PlusCircle, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import api from '../../lib/axios';
+import { useToast } from '../../components/ui/Toast';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Badge from '../../components/ui/Badge';
-import EmptyState from '../../components/ui/EmptyState';
-import BudgetPulseBar from '../../components/travel/BudgetPulseBar';
-import TripSubnav from '../../components/travel/TripSubnav';
-import TripAccessDenied from '../../components/travel/TripAccessDenied';
-import { useTripBundle } from '../../hooks/useTripBundle';
-import { useAuthStore } from '../../store/authStore';
-import { useTravelStore } from '../../store/travelStore';
-import { useToastStore } from '../../store/toastStore';
-import { BUDGET_CATEGORY_META } from '../../lib/meta';
-import { formatCurrency, formatDate } from '../../lib/format';
-import { validateBudgetEntry } from '../../lib/validators';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ArrowLeft, Wallet, Plus, Trash2, AlertTriangle, TrendingUp } from 'lucide-react';
 
-const initialForm = {
-  category: 'transport',
-  label: '',
-  amount: '',
-  entryDate: '',
-  isEstimated: true,
-};
-
-export default function BudgetPage() {
+const BudgetPage = () => {
   const { tripId } = useParams();
+  const [entries, setEntries] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [formData, setFormData] = useState({ category: 'transport', label: '', amount: '', entry_date: new Date().toISOString().split('T')[0] });
+  
+  const { addToast } = useToast();
   const navigate = useNavigate();
-  const bundle = useTripBundle(tripId);
-  const currentUser = useAuthStore((store) => store.users.find((user) => user.id === store.currentUserId));
-  const addBudgetEntry = useTravelStore((store) => store.addBudgetEntry);
-  const updateBudgetEntry = useTravelStore((store) => store.updateBudgetEntry);
-  const deleteBudgetEntry = useTravelStore((store) => store.deleteBudgetEntry);
-  const pushToast = useToastStore((store) => store.pushToast);
-  const [form, setForm] = useState(initialForm);
-  const [touched, setTouched] = useState({});
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [editingId, setEditingId] = useState(null);
 
-  const totals = useMemo(() => {
-    if (!bundle) return [];
-    return Object.keys(BUDGET_CATEGORY_META).map((categoryKey) => ({
-      category: categoryKey,
-      total: bundle.budgetEntries
-        .filter((entry) => entry.category === categoryKey)
-        .reduce((sum, entry) => sum + Number(entry.amount), 0),
-    }));
-  }, [bundle]);
-
-  useEffect(() => {
-    if (bundle?.trip && !form.entryDate) {
-      setForm((state) => ({ ...state, entryDate: bundle.trip.startDate }));
-    }
-  }, [bundle, form.entryDate]);
-
-  if (!bundle) {
-    return (
-      <EmptyState
-        icon={PlusCircle}
-        title="Trip not found"
-        description="Open a trip before editing budget entries."
-        actionLabel="Back to trips"
-        onAction={() => navigate('/trips')}
-      />
-    );
-  }
-
-  if (bundle.trip.userId !== currentUser?.id && !currentUser?.isAdmin) {
-    return <TripAccessDenied actionLabel="Back to trips" onAction={() => navigate('/trips')} />;
-  }
-
-  const handleBlur = (field) => {
-    setTouched((state) => ({ ...state, [field]: true }));
-    setErrors(validateBudgetEntry(form));
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const nextErrors = validateBudgetEntry(form);
-    setTouched({ category: true, label: true, amount: true });
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-
-    setLoading(true);
+  const fetchData = async () => {
     try {
-      if (editingId) {
-        await updateBudgetEntry(editingId, {
-          category: form.category,
-          label: form.label,
-          amount: Number(form.amount),
-          entryDate: form.entryDate,
-          isEstimated: form.isEstimated ? 1 : 0,
-        });
-        pushToast({ title: 'Budget entry updated', description: 'The entry was saved.', variant: 'success' });
-      } else {
-        await addBudgetEntry(tripId, form);
-        pushToast({ title: 'Budget entry added', description: 'New cost added to the budget.', variant: 'success' });
-      }
-      setForm(initialForm);
-      setEditingId(null);
-      setTouched({});
-      setErrors({});
-    } catch (error) {
-      pushToast({ title: 'Budget save failed', description: error.message, variant: 'error' });
+      const [entriesRes, summaryRes] = await Promise.all([
+        api.get(`/budget/${tripId}/budget`),
+        api.get(`/trips/${tripId}/cost-summary`)
+      ]);
+      setEntries(entriesRes.data.data);
+      setSummary(summaryRes.data.data);
+    } catch (err) {
+      addToast('Failed to load budget data', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const chartData = totals.map((item) => ({
-    name: BUDGET_CATEGORY_META[item.category].label,
-    total: item.total,
-  }));
+  useEffect(() => {
+    fetchData();
+  }, [tripId]);
 
-  const budgetSummary = bundle.finances;
+  const handleAddEntry = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`/budget/${tripId}/budget`, formData);
+      addToast('Entry added!', 'success');
+      setFormData({ category: 'transport', label: '', amount: '', entry_date: new Date().toISOString().split('T')[0] });
+      fetchData();
+    } catch (err) {
+      addToast('Failed to add entry', 'error');
+    }
+  };
+
+  const handleDelete = async (entryId) => {
+    try {
+      await api.delete(`/budget/${tripId}/budget/${entryId}`);
+      addToast('Entry removed', 'success');
+      fetchData();
+    } catch (err) {
+      addToast('Failed to delete', 'error');
+    }
+  };
+
+  const chartData = [
+    { name: 'Transport', value: entries.filter(e => e.category === 'transport').reduce((a, b) => a + parseFloat(b.amount), 0) },
+    { name: 'Stay', value: entries.filter(e => e.category === 'accommodation').reduce((a, b) => a + parseFloat(b.amount), 0) },
+    { name: 'Food', value: entries.filter(e => e.category === 'food').reduce((a, b) => a + parseFloat(b.amount), 0) },
+    { name: 'Activity', value: entries.filter(e => e.category === 'activities').reduce((a, b) => a + parseFloat(b.amount), 0) },
+    { name: 'Misc', value: entries.filter(e => e.category === 'misc').reduce((a, b) => a + parseFloat(b.amount), 0) },
+  ].filter(d => d.value > 0);
+
+  const COLORS = ['#2A9D8F', '#F4A261', '#E8A020', '#E63946', '#6B6560'];
 
   return (
-    <div className="space-y-6">
-      <TripSubnav basePath={`/trips/${tripId}`} />
-
-      <section className="overflow-hidden rounded-[2rem] border border-[#cfe0fb] bg-[linear-gradient(135deg,rgba(37,99,235,0.12),rgba(15,118,110,0.08))] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] lg:p-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#1d4ed8]">Budget</p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text">{bundle.trip.title}</h1>
-            <p className="mt-1 text-sm text-muted">Track estimates, actuals, and category totals.</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-white px-4 py-3 shadow-sm">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Activity cost</p>
-            <p className="mt-1 text-xl font-semibold text-text">{formatCurrency(budgetSummary.activityCost)}</p>
-          </div>
+    <div className="max-w-6xl mx-auto">
+      <header className="flex items-center gap-4 mb-12">
+        <button onClick={() => navigate(`/trips/${tripId}`)} className="p-2 hover:bg-surface rounded-full transition-colors">
+          <ArrowLeft />
+        </button>
+        <div>
+          <h1 className="text-4xl">Budget & Costs</h1>
+          <p className="text-muted">Track your spending and stay on budget.</p>
         </div>
-      </section>
+      </header>
 
-      {budgetSummary.budgetStatus === 'over' ? (
-        <Card className="flex items-start gap-3 border-rose-200 bg-rose-50 p-5 text-rose-700">
-          <AlertTriangle className="mt-1 h-5 w-5 shrink-0" />
-          <div>
-            <p className="font-semibold">Trip is over budget</p>
-            <p className="mt-1 text-sm">The combined budget entries and activity costs exceed the budget cap.</p>
-          </div>
-        </Card>
-      ) : null}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: Table & Form */}
+        <div className="lg:col-span-2 space-y-8">
+          {summary?.budget_status === 'over' && (
+            <div className="bg-danger/10 border border-danger/20 p-4 rounded-2xl flex items-center gap-3 text-danger font-bold">
+              <AlertTriangle className="h-5 w-5" />
+              Warning: You are over your total budget of ${summary?.total_budget}!
+            </div>
+          )}
 
-      <BudgetPulseBar
-        budget={bundle.trip.totalBudget}
-        spent={budgetSummary.totalSpent}
-        activityCost={budgetSummary.activityCost}
-        status={budgetSummary.budgetStatus}
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="overflow-hidden">
-          <div className="border-b border-border px-5 py-4">
-            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-text">Budget Entries</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-bg/60 text-xs uppercase tracking-[0.2em] text-muted">
-                <tr>
-                  <th className="px-5 py-3">Category</th>
-                  <th className="px-5 py-3">Label</th>
-                  <th className="px-5 py-3">Amount</th>
-                  <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3">Type</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {bundle.budgetEntries.map((entry) => (
-                  <tr key={entry.id} className="border-t border-border">
-                    <td className="px-5 py-4">
-                      <Badge tone="blue">{BUDGET_CATEGORY_META[entry.category]?.label}</Badge>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-text">{entry.label}</td>
-                    <td className="px-5 py-4 text-sm font-semibold text-text">{formatCurrency(entry.amount)}</td>
-                    <td className="px-5 py-4 text-sm text-muted">{entry.entryDate ? formatDate(entry.entryDate) : '-'}</td>
-                    <td className="px-5 py-4">
-                      <button
-                        type="button"
-                        className="rounded-full bg-bg px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-text"
-                        onClick={async () => {
-                          await updateBudgetEntry(entry.id, { isEstimated: entry.isEstimated ? 0 : 1 });
-                        }}
-                      >
-                        {entry.isEstimated ? 'Estimated' : 'Actual'}
-                      </button>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            setForm({
-                              category: entry.category,
-                              label: entry.label,
-                              amount: String(entry.amount),
-                              entryDate: entry.entryDate || '',
-                              isEstimated: Boolean(entry.isEstimated),
-                            });
-                            setEditingId(entry.id);
-                          }}
-                        >
-                          <PencilLine className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="text-danger"
-                          onClick={async () => {
-                            await deleteBudgetEntry(entry.id);
-                            pushToast({ title: 'Budget entry deleted', description: 'The entry was removed.', variant: 'success' });
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
+          <Card className="p-8">
+            <h2 className="text-2xl mb-6">Expense Entries</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-border text-xs uppercase tracking-widest text-muted">
+                    <th className="pb-4 font-bold">Category</th>
+                    <th className="pb-4 font-bold">Label</th>
+                    <th className="pb-4 font-bold">Date</th>
+                    <th className="pb-4 font-bold text-right">Amount</th>
+                    <th className="pb-4"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <form className="space-y-4 border-t border-border p-5" onSubmit={handleSubmit}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input label="Category" as="select" value={form.category} onChange={(event) => setForm((state) => ({ ...state, category: event.target.value }))}>
-                {Object.entries(BUDGET_CATEGORY_META).map(([value, meta]) => (
-                  <option key={value} value={value}>
-                    {meta.label}
-                  </option>
-                ))}
-              </Input>
-              <Input
-                label="Label"
-                value={form.label}
-                onChange={(event) => setForm((state) => ({ ...state, label: event.target.value }))}
-                onBlur={() => handleBlur('label')}
-                error={touched.label ? errors.label : ''}
-              />
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {entries.map(entry => (
+                    <tr key={entry.id} className="group">
+                      <td className="py-4"><Badge variant={entry.category === 'transport' ? 'blue' : 'amber'}>{entry.category}</Badge></td>
+                      <td className="py-4 font-bold">{entry.label}</td>
+                      <td className="py-4 text-sm text-muted">{new Date(entry.entry_date).toLocaleDateString()}</td>
+                      <td className="py-4 font-bold text-right text-text">${parseFloat(entry.amount).toFixed(2)}</td>
+                      <td className="py-4 text-right">
+                        <button onClick={() => handleDelete(entry.id)} className="p-2 text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-all">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label="Amount"
+            <form onSubmit={handleAddEntry} className="mt-8 pt-8 border-t border-border grid grid-cols-1 md:grid-cols-4 gap-4">
+              <select 
+                className="px-4 py-2.5 rounded-xl border border-border outline-none bg-bg text-sm font-bold"
+                value={formData.category}
+                onChange={(e) => setFormData({...formData, category: e.target.value})}
+              >
+                <option value="transport">Transport</option>
+                <option value="accommodation">Accommodation</option>
+                <option value="food">Food</option>
+                <option value="activities">Activities</option>
+                <option value="misc">Misc</option>
+              </select>
+              <input 
+                placeholder="Label"
+                className="px-4 py-2.5 rounded-xl border border-border outline-none bg-bg text-sm"
+                value={formData.label}
+                onChange={(e) => setFormData({...formData, label: e.target.value})}
+                required
+              />
+              <input 
                 type="number"
-                min="0"
-                step="0.01"
-                value={form.amount}
-                onChange={(event) => setForm((state) => ({ ...state, amount: event.target.value }))}
-                onBlur={() => handleBlur('amount')}
-                error={touched.amount ? errors.amount : ''}
+                placeholder="Amount"
+                className="px-4 py-2.5 rounded-xl border border-border outline-none bg-bg text-sm"
+                value={formData.amount}
+                onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                required
               />
-              <Input
-                label="Date"
-                type="date"
-                value={form.entryDate}
-                onChange={(event) => setForm((state) => ({ ...state, entryDate: event.target.value }))}
-              />
-            </div>
-
-            <label className="flex items-center gap-3 text-sm text-text">
-              <input
-                type="checkbox"
-                checked={form.isEstimated}
-                onChange={(event) => setForm((state) => ({ ...state, isEstimated: event.target.checked }))}
-                className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
-              />
-              Estimated amount
-            </label>
-
-            <div className="flex flex-wrap gap-3">
-              <Button type="submit" loading={loading}>
-                {editingId ? 'Update Entry' : 'Add Entry'}
+              <Button type="submit" className="py-2.5">
+                Add Entry
               </Button>
-              {editingId ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setEditingId(null);
-                    setForm(initialForm);
-                  }}
-                >
-                  Cancel Edit
-                </Button>
-              ) : null}
-            </div>
-          </form>
-        </Card>
+            </form>
+          </Card>
+        </div>
 
-        <div className="space-y-6">
-          <Card className="p-5">
-            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-text">Category Breakdown</h2>
-            <div className="mt-6 h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="#E8E2D9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tickFormatter={(value) => `$${value}`} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Bar dataKey="total" fill="#2563EB" radius={[12, 12, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+        {/* Right: Charts & Summary */}
+        <div className="space-y-8">
+          <Card className="p-8 bg-text text-white">
+            <h3 className="text-white/60 text-xs uppercase tracking-widest font-bold mb-4">Total Spent</h3>
+            <p className="text-5xl font-bold mb-2">${summary?.total_estimated_cost?.toLocaleString()}</p>
+            <div className="flex items-center gap-2 text-teal font-bold text-sm">
+              <TrendingUp className="h-4 w-4" /> {summary?.budget_used_pct}% of budget used
             </div>
           </Card>
 
-          <Card className="p-5">
-            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-text">Budget Summary</h2>
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between rounded-2xl bg-bg px-4 py-3">
-                <span className="text-sm text-muted">Total budget</span>
-                <span className="font-semibold text-text">{formatCurrency(bundle.trip.totalBudget)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl bg-bg px-4 py-3">
-                <span className="text-sm text-muted">Spent</span>
-                <span className="font-semibold text-text">{formatCurrency(budgetSummary.totalSpent)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl bg-bg px-4 py-3">
-                <span className="text-sm text-muted">Activity cost</span>
-                <span className="font-semibold text-text">{formatCurrency(budgetSummary.activityCost)}</span>
-              </div>
-            </div>
+          <Card className="p-8 h-80">
+            <h3 className="text-xl mb-6">Spending Breakdown</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E8E2D9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 'bold' }} />
+                <YAxis hide />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  cursor={{ fill: '#FAF7F2' }}
+                />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </Card>
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default BudgetPage;

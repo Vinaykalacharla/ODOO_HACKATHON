@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap');
+
+@theme {
+  --color-bg: #0A0A0A;
+  --color-surface: #121212;
+  --color-border: #1F1F1F;
+  --color-accent: #6366F1;
+  --color-accent-hover: #4F46E5;
+  --color-accent-light: #818CF8;
+  --color-muted: #A1A1AA;
+  --color-text: #F4F4F5;
+  --color-teal: #2DD4BF;
+  --color-danger: #F43F5E;
+  
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Outfit", serif;
+  
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@utility glass {
+  background-color: color-mix(in srgb, var(--color-surface) 50%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--color-border);
+}
+
+@utility glass-card {
+  background-color: color-mix(in srgb, var(--color-surface) 50%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--color-border);
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  transition-property: all;
+  transition-duration: 300ms;
+  &:hover {
+    border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+}
+
+@utility btn-premium {
+  position: relative;
+  overflow: hidden;
+  padding: 0.625rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  transition-property: all;
+  transition-duration: 300ms;
+  background-color: var(--color-accent);
+  color: white;
+  &:hover {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+  }
+  &:active {
+    scale: 0.95;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@utility input-premium {
+  width: 100%;
+  background-color: color-mix(in srgb, var(--color-surface) 50%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  outline: none;
+  transition-property: all;
+  transition-duration: 300ms;
+  &:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+}
+
+@layer base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    color: white;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 9999px;
+  &:hover {
+    background-color: color-mix(in srgb, var(--color-muted) 30%, transparent);
+  }
+}

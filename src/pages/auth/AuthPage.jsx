@@ -1,251 +1,194 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, UserRound, ArrowRight, KeyRound, Sparkles, BadgeCheck, ShieldCheck } from 'lucide-react';
-import AuthShell from '../../components/layout/AuthShell';
-import Card from '../../components/ui/Card';
-import Input from '../../components/ui/Input';
-import Button from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
-import { useToastStore } from '../../store/toastStore';
-import { validateLogin, validateSignup } from '../../lib/validators';
+import { useToast } from '../../components/ui/Toast';
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import Card from '../../components/ui/Card';
+import Modal from '../../components/ui/Modal';
+import { Plane, MapPin, Globe } from 'lucide-react';
 
-const demoLogin = {
-  email: 'traveler@demo.com',
-  password: 'demo1234',
-};
-
-export default function AuthPage() {
+const AuthPage = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [errors, setErrors] = useState({});
+  
+  const { login, signup, loading } = useAuthStore();
+  const { addToast } = useToast();
   const navigate = useNavigate();
-  const login = useAuthStore((state) => state.login);
-  const signup = useAuthStore((state) => state.signup);
-  const currentUser = useAuthStore((state) => state.getCurrentUser());
-  const pushToast = useToastStore((state) => state.pushToast);
 
-  const [tab, setTab] = useState('login');
-
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [loginTouched, setLoginTouched] = useState({});
-  const [loginLoading, setLoginLoading] = useState(false);
-
-  const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '' });
-  const [signupTouched, setSignupTouched] = useState({});
-  const [signupLoading, setSignupLoading] = useState(false);
-
-  const [forgotForm, setForgotForm] = useState({ email: '' });
-  const [forgotTouched, setForgotTouched] = useState({});
-  const [forgotLoading, setForgotLoading] = useState(false);
-
-  const loginErrors = useMemo(() => validateLogin(loginForm), [loginForm]);
-  const signupErrors = useMemo(() => validateSignup(signupForm), [signupForm]);
-  const forgotErrors = useMemo(() => (forgotForm.email ? {} : { email: 'Enter your email address.' }), [forgotForm]);
-
-  useEffect(() => {
-    if (currentUser) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [currentUser, navigate]);
-
-  const blur = (setter, form, validateFn, field) => {
-    setter((state) => ({ ...state, [field]: true }));
-    validateFn(form);
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.email) newErrors.email = 'Email is required';
+    if (!formData.password) newErrors.password = 'Password is required';
+    if (!isLogin && !formData.name) newErrors.name = 'Name is required';
+    if (formData.password && formData.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleLogin = async (event) => {
-    event.preventDefault();
-    setLoginTouched({ email: true, password: true });
-    if (Object.keys(loginErrors).length > 0) return;
-    setLoginLoading(true);
-    try {
-      await login(loginForm);
-      pushToast({ title: 'Signed in', description: 'Welcome back to Traveloop.', variant: 'success' });
-      navigate('/dashboard');
-    } catch (error) {
-      pushToast({ title: 'Sign in failed', description: error.message, variant: 'error' });
-    } finally {
-      setLoginLoading(false);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    if (isLogin) {
+      const result = await login(formData.email, formData.password);
+      if (result.success) {
+        addToast('Welcome back to Traveloop!', 'success');
+        navigate('/dashboard');
+      } else {
+        addToast(result.error, 'error');
+      }
+    } else {
+      const result = await signup(formData.name, formData.email, formData.password);
+      if (result.success) {
+        addToast('Account created! You can now login.', 'success');
+        setIsLogin(true);
+      } else {
+        addToast(result.error, 'error');
+      }
     }
   };
 
-  const handleSignup = async (event) => {
-    event.preventDefault();
-    setSignupTouched({ name: true, email: true, password: true });
-    if (Object.keys(signupErrors).length > 0) return;
-    setSignupLoading(true);
-    try {
-      await signup(signupForm);
-      pushToast({ title: 'Account created', description: 'Your Traveloop workspace is ready.', variant: 'success' });
-      navigate('/dashboard');
-    } catch (error) {
-      pushToast({ title: 'Signup failed', description: error.message, variant: 'error' });
-    } finally {
-      setSignupLoading(false);
-    }
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
   };
 
-  const handleForgot = async (event) => {
-    event.preventDefault();
-    setForgotTouched({ email: true });
-    if (Object.keys(forgotErrors).length > 0) return;
-    setForgotLoading(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      pushToast({ title: 'Reset ready', description: 'Password reset instructions were queued for the demo.', variant: 'success' });
-    } finally {
-      setForgotLoading(false);
-    }
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+
+  const handleForgotPassword = (e) => {
+    e.preventDefault();
+    addToast(`Password reset link sent to ${resetEmail}!`, 'info');
+    setIsForgotModalOpen(false);
+    setResetEmail('');
   };
 
   return (
-    <AuthShell>
-      <Card className="w-full max-w-xl p-6 lg:p-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">Secure access</p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-text">Book your next route</h2>
-          </div>
-          <div className="rounded-2xl bg-[#eef4ff] px-3 py-2 text-right">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-[#1d4ed8]">Demo ready</p>
-            <p className="mt-1 text-xs font-semibold text-text">traveler@demo.com</p>
-          </div>
+    <div className="min-h-screen flex">
+      {/* ... existing branding ... */}
+      <div className="hidden lg:flex lg:w-1/2 bg-accent items-center justify-center relative overflow-hidden p-12">
+        <div className="absolute top-0 left-0 w-full h-full opacity-10">
+          <Globe className="absolute -top-20 -left-20 h-[600px] w-[600px]" />
+          <MapPin className="absolute bottom-20 right-20 h-40 w-40" />
         </div>
-
-        <div className="mt-6 grid grid-cols-3 rounded-full bg-[#f1f6ff] p-1">
-          {[
-            ['login', 'Login'],
-            ['signup', 'Signup'],
-            ['forgot', 'Reset'],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setTab(value)}
-              className={`focus-ring rounded-full px-4 py-2.5 text-sm font-semibold transition ${
-                tab === value ? 'bg-white text-text shadow-[0_10px_25px_rgba(15,23,42,0.08)]' : 'text-muted hover:text-text'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-6 rounded-[1.35rem] border border-sky-100 bg-sky-50/70 p-4">
-          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-semibold text-sky-700 shadow-sm">
-              <Sparkles className="h-4 w-4" />
-              Professional booking-style UI
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 font-semibold text-teal-700 shadow-sm">
-              <ShieldCheck className="h-4 w-4" />
-              Demo auth
-            </span>
+        <div className="relative z-10 text-white max-w-md">
+          <div className="flex items-center gap-3 mb-8">
+            <Plane className="h-12 w-12 rotate-45" />
+            <h1 className="text-5xl font-serif">Traveloop</h1>
           </div>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Use the demo login to inspect the app quickly, or create a fresh workspace with signup.
+          <h2 className="text-3xl mb-6 font-serif">The smarter way to plan your next adventure.</h2>
+          <p className="text-lg opacity-90 leading-relaxed">
+            Multi-city planning, budget tracking, and itinerary sharing—all in one premium platform. Join thousands of travelers today.
           </p>
         </div>
+      </div>
 
-        <div className="mt-6">
-          {tab === 'login' ? (
-            <form className="space-y-4" onSubmit={handleLogin}>
+      {/* Right Side: Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-bg">
+        <div className="w-full max-w-md">
+          <Card className="p-8">
+            <div className="flex gap-4 mb-8 border-b border-border">
+              <button
+                onClick={() => setIsLogin(true)}
+                className={`pb-4 px-2 font-bold transition-all border-b-2 ${isLogin ? 'border-accent text-accent' : 'border-transparent text-muted'}`}
+              >
+                Login
+              </button>
+              <button
+                onClick={() => setIsLogin(false)}
+                className={`pb-4 px-2 font-bold transition-all border-b-2 ${!isLogin ? 'border-accent text-accent' : 'border-transparent text-muted'}`}
+              >
+                Signup
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              {!isLogin && (
+                <Input
+                  label="Full Name"
+                  name="name"
+                  placeholder="John Doe"
+                  value={formData.name}
+                  onChange={handleChange}
+                  error={errors.name}
+                  onBlur={validate}
+                />
+              )}
               <Input
-                label="Email"
+                label="Email Address"
                 type="email"
-                value={loginForm.email}
-                onChange={(event) => setLoginForm((state) => ({ ...state, email: event.target.value }))}
-                onBlur={() => blur(setLoginTouched, loginForm, validateLogin, 'email')}
-                error={loginTouched.email ? loginErrors.email : ''}
-                placeholder="traveler@demo.com"
-                helperText="Use the demo login if you want to inspect the app quickly."
-                icon={<Mail className="h-4 w-4" />}
+                name="email"
+                placeholder="traveler@example.com"
+                value={formData.email}
+                onChange={handleChange}
+                error={errors.email}
+                onBlur={validate}
               />
               <Input
                 label="Password"
                 type="password"
-                value={loginForm.password}
-                onChange={(event) => setLoginForm((state) => ({ ...state, password: event.target.value }))}
-                onBlur={() => blur(setLoginTouched, loginForm, validateLogin, 'password')}
-                error={loginTouched.password ? loginErrors.password : ''}
-                placeholder="Enter your password"
-                icon={<Lock className="h-4 w-4" />}
+                name="password"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={handleChange}
+                error={errors.password}
+                onBlur={validate}
+                helper={!isLogin ? "Min. 8 chars, 1 letter, 1 number" : ""}
               />
 
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Button type="submit" loading={loginLoading} className="flex-1">
-                  Sign in
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setLoginForm(demoLogin);
-                    setTab('login');
-                  }}
+              <Button type="submit" loading={loading} className="mt-4 py-4 text-lg">
+                {isLogin ? 'Sign In' : 'Create Account'}
+              </Button>
+
+              {isLogin && (
+                <button 
+                  type="button" 
+                  onClick={() => setIsForgotModalOpen(true)}
+                  className="text-sm font-semibold text-accent hover:underline text-center"
                 >
-                  Demo login
-                </Button>
-              </div>
+                  Forgot Password?
+                </button>
+              )}
             </form>
-          ) : null}
-
-          {tab === 'signup' ? (
-            <form className="space-y-4" onSubmit={handleSignup}>
-              <Input
-                label="Name"
-                value={signupForm.name}
-                onChange={(event) => setSignupForm((state) => ({ ...state, name: event.target.value }))}
-                onBlur={() => blur(setSignupTouched, signupForm, validateSignup, 'name')}
-                error={signupTouched.name ? signupErrors.name : ''}
-                placeholder="Your name"
-                icon={<UserRound className="h-4 w-4" />}
-              />
-              <Input
-                label="Email"
-                type="email"
-                value={signupForm.email}
-                onChange={(event) => setSignupForm((state) => ({ ...state, email: event.target.value }))}
-                onBlur={() => blur(setSignupTouched, signupForm, validateSignup, 'email')}
-                error={signupTouched.email ? signupErrors.email : ''}
-                placeholder="you@example.com"
-                icon={<Mail className="h-4 w-4" />}
-              />
-              <Input
-                label="Password"
-                type="password"
-                value={signupForm.password}
-                onChange={(event) => setSignupForm((state) => ({ ...state, password: event.target.value }))}
-                onBlur={() => blur(setSignupTouched, signupForm, validateSignup, 'password')}
-                error={signupTouched.password ? signupErrors.password : ''}
-                placeholder="At least 8 characters"
-                helperText="Use a mix of letters and numbers."
-                icon={<Lock className="h-4 w-4" />}
-              />
-              <Button type="submit" loading={signupLoading} className="w-full">
-                Create account
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </form>
-          ) : null}
-
-          {tab === 'forgot' ? (
-            <form className="space-y-4" onSubmit={handleForgot}>
-              <Input
-                label="Email"
-                type="email"
-                value={forgotForm.email}
-                onChange={(event) => setForgotForm({ email: event.target.value })}
-                onBlur={() => blur(setForgotTouched, forgotForm, () => (forgotForm.email ? {} : { email: 'Enter your email address.' }), 'email')}
-                error={forgotTouched.email ? forgotErrors.email : ''}
-                placeholder="you@example.com"
-                icon={<KeyRound className="h-4 w-4" />}
-              />
-              <Button type="submit" loading={forgotLoading} className="w-full">
-                Send reset request
-              </Button>
-            </form>
-          ) : null}
+          </Card>
+          <p className="text-center mt-8 text-sm text-muted">
+            {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
+            <button 
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-accent font-bold hover:underline"
+            >
+              {isLogin ? 'Sign Up' : 'Sign In'}
+            </button>
+          </p>
         </div>
-      </Card>
-    </AuthShell>
+      </div>
+
+      {/* Forgot Password Modal */}
+      <Modal 
+        isOpen={isForgotModalOpen} 
+        onClose={() => setIsForgotModalOpen(false)} 
+        title="Reset Password"
+      >
+        <form onSubmit={handleForgotPassword} className="space-y-6">
+          <p className="text-muted">Enter your email address and we'll send you a link to reset your password.</p>
+          <Input 
+            label="Email Address"
+            type="email"
+            placeholder="traveler@example.com"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            required
+          />
+          <Button type="submit" className="w-full">
+            Send Reset Link
+          </Button>
+        </form>
+      </Modal>
+    </div>
   );
-}
+};
+
+export default AuthPage;

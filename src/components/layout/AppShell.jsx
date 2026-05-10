@@ -1,129 +1,124 @@
-import { NavLink, useLocation } from 'react-router-dom';
-import { BarChart3, Compass, Home, MapPinned, Settings, ShipWheel, LogOut, PlusCircle, Sparkles } from 'lucide-react';
-import Button from '../ui/Button';
+import React from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { cn } from '../../lib/cn';
+import { 
+  LayoutDashboard, 
+  Map, 
+  PlusCircle, 
+  Settings, 
+  LogOut, 
+  Plane,
+  ShieldCheck,
+  Menu,
+  X
+} from 'lucide-react';
+import { useState } from 'react';
 
-const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: Home },
-  { to: '/trips', label: 'My Trips', icon: Compass },
-  { to: '/trips/new', label: 'Create Trip', icon: PlusCircle },
-  { to: '/cities', label: 'Cities', icon: MapPinned },
-  { to: '/settings', label: 'Settings', icon: Settings },
-];
-
-export default function AppShell({ children }) {
+const AppShell = ({ children }) => {
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
   const location = useLocation();
-  const currentUser = useAuthStore((state) => state.getCurrentUser());
-  const logout = useAuthStore((state) => state.logout);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const showAdminLink = Boolean(currentUser?.isAdmin);
+  const navItems = [
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+    { label: 'My Trips', icon: Map, path: '/trips' },
+    { label: 'New Trip', icon: PlusCircle, path: '/trips/new' },
+    { label: 'Settings', icon: Settings, path: '/settings' },
+  ];
+
+  if (user?.is_admin) {
+    navItems.push({ label: 'Admin', icon: ShieldCheck, path: '/admin' });
+  }
+
+  const isActive = (path) => location.pathname === path;
 
   return (
-    <div className="min-h-screen bg-bg">
-      <div className="mx-auto grid min-h-screen max-w-[1680px] gap-6 p-4 lg:grid-cols-[300px_minmax(0,1fr)] lg:p-6">
-        <aside className="sticky top-6 h-fit overflow-hidden rounded-[2rem] border border-[#11264a] bg-[linear-gradient(180deg,#0f172a_0%,#111f3d_45%,#0b1324_100%)] p-5 text-white shadow-[0_30px_80px_rgba(2,6,23,0.28)]">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-white backdrop-blur">
-              <Sparkles className="h-6 w-6 text-[#60a5fa]" />
+    <div className="min-h-screen bg-bg flex">
+      {/* Sidebar - Desktop */}
+      <aside className="hidden md:flex flex-col w-72 bg-surface border-r border-border h-screen sticky top-0">
+        <div className="p-8 flex items-center gap-3">
+          <Plane className="h-8 w-8 text-accent rotate-45" />
+          <h2 className="text-2xl text-text">Traveloop</h2>
+        </div>
+
+        <nav className="flex-1 px-4 py-4 flex flex-col gap-1">
+          {navItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all
+                ${isActive(item.path) 
+                  ? 'bg-accent/10 text-accent' 
+                  : 'text-muted hover:bg-bg hover:text-text'}`}
+            >
+              <item.icon className="h-5 w-5" />
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-border">
+          <div className="flex items-center gap-3 px-4 py-3 mb-2">
+            <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold">
+              {user?.name?.[0] || 'U'}
             </div>
-            <div>
-              <p className="text-2xl font-semibold tracking-[-0.04em] text-white">Traveloop</p>
-              <p className="text-xs text-white/[0.65]">Premium trip planning, done cleanly.</p>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-sm font-bold truncate">{user?.name}</p>
+              <p className="text-xs text-muted truncate">{user?.email}</p>
             </div>
           </div>
-
-          <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/[0.06] p-4 backdrop-blur">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-white/[0.55]">Signed in as</p>
-            <p className="mt-1 text-sm font-semibold text-white">{currentUser?.name || 'Guest traveler'}</p>
-            <p className="text-xs text-white/60">{currentUser?.email || 'Not signed in'}</p>
-          </div>
-
-          <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-white/[0.06] p-4 backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/[0.55]">Workspace</p>
-                <p className="mt-1 text-sm font-medium text-white/90">Focused trip management</p>
-              </div>
-              <ShipWheel className="h-5 w-5 text-[#93c5fd]" />
-            </div>
-            <p className="mt-3 text-sm leading-6 text-white/70">Plan routes, budgets, packing, and public itineraries from one booking-style workspace.</p>
-          </div>
-
-          <nav className="mt-6 space-y-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-medium transition duration-200',
-                      isActive
-                      ? 'border-white/[0.15] bg-white/[0.12] text-white shadow-[0_16px_35px_rgba(2,6,23,0.18)]'
-                      : 'border-transparent text-white/[0.72] hover:border-white/10 hover:bg-white/[0.08] hover:text-white',
-                    )
-                  }
-                >
-                  <Icon className="h-4 w-4 text-[#93c5fd]" />
-                  {item.label}
-                </NavLink>
-              );
-            })}
-
-            {showAdminLink ? (
-              <NavLink
-                to="/admin"
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-medium transition duration-200',
-                    isActive
-                      ? 'border-[#7dd3fc]/30 bg-[#0ea5e9]/20 text-white shadow-[0_16px_35px_rgba(14,165,233,0.2)]'
-                      : 'border-transparent text-white/[0.72] hover:border-white/10 hover:bg-white/[0.08] hover:text-white',
-                  )
-                }
-              >
-                <BarChart3 className="h-4 w-4 text-[#7dd3fc]" />
-                Admin
-              </NavLink>
-            ) : null}
-          </nav>
-
-          <div className="mt-6 rounded-[1.5rem] border border-dashed border-white/10 p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-white/[0.55]">Active route</p>
-            <p className="mt-2 break-all text-sm text-white/80">{location.pathname}</p>
-          </div>
-
-          <Button
-            variant="secondary"
-            className="mt-6 w-full justify-center border-white/10 bg-white text-text hover:bg-[#f6f9ff]"
-            onClick={async () => {
-              await logout();
-              window.location.assign('/login');
-            }}
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-3 px-4 py-3 rounded-xl font-medium text-danger hover:bg-danger/5 transition-all"
           >
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </Button>
-        </aside>
+            <LogOut className="h-5 w-5" />
+            Logout
+          </button>
+        </div>
+      </aside>
 
-        <main className="min-w-0 rounded-[2rem] border border-border/70 bg-surface/96 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] lg:p-6">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted">Journey workspace</p>
-              <p className="mt-1 text-sm text-text">
-                {currentUser?.name ? `Planning as ${currentUser.name}` : 'Travel planning workspace'}
-              </p>
-            </div>
-            <div className="rounded-full border border-border bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
-              {location.pathname}
-            </div>
-          </div>
-
-          {children}
-        </main>
+      {/* Mobile Nav */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-surface border-b border-border p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Plane className="h-6 w-6 text-accent rotate-45" />
+          <h2 className="text-xl">Traveloop</h2>
+        </div>
+        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+          {isMobileMenuOpen ? <X /> : <Menu />}
+        </button>
       </div>
+
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-30 bg-surface pt-20 px-4 flex flex-col gap-2">
+          {navItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`flex items-center gap-3 px-4 py-4 rounded-xl font-bold
+                ${isActive(item.path) ? 'bg-accent/10 text-accent' : 'text-muted'}`}
+            >
+              <item.icon className="h-6 w-6" />
+              {item.label}
+            </Link>
+          ))}
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 px-4 py-4 rounded-xl font-bold text-danger"
+          >
+            <LogOut className="h-6 w-6" />
+            Logout
+          </button>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <main className="flex-1 p-6 md:p-12 pt-24 md:pt-12 overflow-x-hidden">
+        {children}
+      </main>
     </div>
   );
-}
+};
+
+export default AppShell;

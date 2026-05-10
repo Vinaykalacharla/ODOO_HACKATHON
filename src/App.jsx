@@ -1,187 +1,66 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuthStore } from './store/authStore';
+
+// Layout
+import AppShell from './components/layout/AppShell';
+
+// Pages
 import AuthPage from './pages/auth/AuthPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
-import CreateTripPage from './pages/trips/CreateTripPage';
 import MyTripsPage from './pages/trips/MyTripsPage';
+import CreateTripPage from './pages/trips/CreateTripPage';
 import TripDetailPage from './pages/trips/TripDetailPage';
 import ItineraryBuilderPage from './pages/trips/ItineraryBuilderPage';
 import ItineraryViewPage from './pages/trips/ItineraryViewPage';
-import CitiesPage from './pages/cities/CitiesPage';
-import ActivitySearchPage from './pages/cities/ActivitySearchPage';
 import BudgetPage from './pages/budget/BudgetPage';
 import PackingPage from './pages/packing/PackingPage';
 import NotesPage from './pages/notes/NotesPage';
 import PublicItineraryPage from './pages/public/PublicItineraryPage';
-import SettingsPage from './pages/settings/SettingsPage';
 import AdminPage from './pages/admin/AdminPage';
-import NotFoundPage from './pages/NotFoundPage';
-import AppShell from './components/layout/AppShell';
-import RequireAuth from './components/routes/RequireAuth';
-import RequireAdmin from './components/routes/RequireAdmin';
-import ToastHost from './components/ui/ToastHost';
-import { useAuthStore } from './store/authStore';
+import SettingsPage from './pages/settings/SettingsPage';
 
-function PublicOnly({ children }) {
-  const currentUser = useAuthStore((state) => state.getCurrentUser());
-  if (currentUser) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  return children;
-}
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated } = useAuthStore();
+  return isAuthenticated ? <AppShell>{children}</AppShell> : <Navigate to="/login" />;
+};
 
-function Protected({ children }) {
+const AdminRoute = ({ children }) => {
+  const { user, isAuthenticated } = useAuthStore();
+  if (!isAuthenticated) return <Navigate to="/login" />;
+  if (!user?.is_admin) return <Navigate to="/dashboard" />;
+  return <AppShell>{children}</AppShell>;
+};
+
+const App = () => {
   return (
-    <RequireAuth>
-      <AppShell>{children}</AppShell>
-    </RequireAuth>
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/login" element={<AuthPage />} />
+      <Route path="/share/:token" element={<PublicItineraryPage />} />
+
+      {/* Protected Routes */}
+      <Route path="/" element={<Navigate to="/dashboard" />} />
+      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      
+      <Route path="/trips" element={<ProtectedRoute><MyTripsPage /></ProtectedRoute>} />
+      <Route path="/trips/new" element={<ProtectedRoute><CreateTripPage /></ProtectedRoute>} />
+      <Route path="/trips/:tripId" element={<ProtectedRoute><TripDetailPage /></ProtectedRoute>} />
+      <Route path="/trips/:tripId/edit" element={<ProtectedRoute><CreateTripPage /></ProtectedRoute>} />
+      <Route path="/trips/:tripId/builder" element={<ProtectedRoute><ItineraryBuilderPage /></ProtectedRoute>} />
+      <Route path="/trips/:tripId/view" element={<ProtectedRoute><ItineraryViewPage /></ProtectedRoute>} />
+      <Route path="/trips/:tripId/budget" element={<ProtectedRoute><BudgetPage /></ProtectedRoute>} />
+      <Route path="/trips/:tripId/packing" element={<ProtectedRoute><PackingPage /></ProtectedRoute>} />
+      <Route path="/trips/:tripId/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+
+      {/* Admin Routes */}
+      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+
+      {/* Catch-all */}
+      <Route path="*" element={<Navigate to="/dashboard" />} />
+    </Routes>
   );
-}
+};
 
-function AdminProtected({ children }) {
-  return (
-    <RequireAuth>
-      <AppShell>
-        <RequireAdmin>{children}</RequireAdmin>
-      </AppShell>
-    </RequireAuth>
-  );
-}
-
-function RootRedirect() {
-  const currentUser = useAuthStore((state) => state.getCurrentUser());
-  return <Navigate to={currentUser ? '/dashboard' : '/login'} replace />;
-}
-
-export default function App() {
-  return (
-    <>
-      <ToastHost />
-      <Routes>
-        <Route path="/" element={<RootRedirect />} />
-        <Route
-          path="/login"
-          element={
-            <PublicOnly>
-              <AuthPage />
-            </PublicOnly>
-          }
-        />
-        <Route path="/share/:token" element={<PublicItineraryPage />} />
-
-        <Route
-          path="/dashboard"
-          element={
-            <Protected>
-              <DashboardPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips"
-          element={
-            <Protected>
-              <MyTripsPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/new"
-          element={
-            <Protected>
-              <CreateTripPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/:tripId/edit"
-          element={
-            <Protected>
-              <CreateTripPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/:tripId"
-          element={
-            <Protected>
-              <TripDetailPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/:tripId/builder"
-          element={
-            <Protected>
-              <ItineraryBuilderPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/:tripId/view"
-          element={
-            <Protected>
-              <ItineraryViewPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/:tripId/budget"
-          element={
-            <Protected>
-              <BudgetPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/:tripId/packing"
-          element={
-            <Protected>
-              <PackingPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/trips/:tripId/notes"
-          element={
-            <Protected>
-              <NotesPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/cities"
-          element={
-            <Protected>
-              <CitiesPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/cities/:cityId/activities"
-          element={
-            <Protected>
-              <ActivitySearchPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <Protected>
-              <SettingsPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <AdminProtected>
-              <AdminPage />
-            </AdminProtected>
-          }
-        />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </>
-  );
-}
+export default App;
