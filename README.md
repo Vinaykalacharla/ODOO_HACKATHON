@@ -76,7 +76,7 @@ Built for the **Odoo 12-Hour Hackathon**, the application prioritizes:
 ### Innovative UI Components
 - **Trip Health Score Gauge** — SVG circular arc (0–100) combining budget adherence, stop completeness, and packing progress. Color shifts teal → amber → red based on score.
 - **Budget Pulse Bar** — Animated horizontal bar showing budget vs. spent. Transitions on mount. Shows warning/over-budget state with color and badge.
-- **Drag-and-Drop Stop Reorder** — Native HTML5 drag API (no library). Updates `stop_order` in DB on drop.
+- **Drag-and-Drop Stop Reorder** — Native HTML5 drag API (no library). Updates `stop_order` in DataBase on drop.
 
 ---
 
