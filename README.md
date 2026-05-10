@@ -1,4 +1,4 @@
-# 🌍 traveloop — Personalized Travel Planning Made Easy
+# 🌍 Traveloop — Personalized Travel Planning Made Easy
 
 > A production-grade, full-stack multi-city travel planning platform built for the Odoo Hackathon.  
 > Plan trips. Build itineraries. Track budgets. Share adventures.
